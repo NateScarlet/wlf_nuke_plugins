@@ -1,0 +1,954 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh_cn">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>comp.base &#8212; 吾立方插件 0.20.10 文档</title>
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="../../_static/language_data.js"></script>
+    <link rel="index" title="索引" href="../../genindex.html" />
+    <link rel="search" title="搜索" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>comp.base 源代码</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding=UTF-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;Gather footages and create output.  &quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">webbrowser</span>
+
+<span class="kn">import</span> <span class="nn">cast_unknown</span> <span class="k">as</span> <span class="nn">cast</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">nuke</span>
+<span class="kn">import</span> <span class="nn">six</span>
+
+<span class="kn">from</span> <span class="nn">comp.config</span> <span class="kn">import</span> <span class="n">BatchCompConfig</span><span class="p">,</span> <span class="n">CompConfig</span>
+<span class="kn">from</span> <span class="nn">comp.precomp</span> <span class="kn">import</span> <span class="n">Precomp</span>
+<span class="kn">from</span> <span class="nn">node</span> <span class="kn">import</span> <span class="n">ReadNode</span>
+<span class="kn">from</span> <span class="nn">nuketools</span> <span class="kn">import</span> <span class="n">undoable_func</span>
+<span class="kn">from</span> <span class="nn">organize</span> <span class="kn">import</span> <span class="n">autoplace</span>
+<span class="kn">from</span> <span class="nn">wlf.progress.core</span> <span class="kn">import</span> <span class="n">DefaultHandler</span>
+
+<span class="n">CONFIG</span> <span class="o">=</span> <span class="n">CompConfig</span><span class="p">()</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;com.wlf.comp&quot;</span><span class="p">)</span>
+<span class="n">BATCH_CONFIG</span> <span class="o">=</span> <span class="n">BatchCompConfig</span><span class="p">()</span>
+
+<span class="n">TYPE_CHECKING</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">typing</span>
+
+
+<div class="viewcode-block" id="Comp"><a class="viewcode-back" href="../../references/comp.html#comp.Comp">[文档]</a><span class="k">class</span> <span class="nc">Comp</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create .nk file from footage that tagged in filename.&quot;&quot;&quot;</span>
+
+    <span class="n">tag_metadata_key</span> <span class="o">=</span> <span class="s2">&quot;comp/tag&quot;</span>
+    <span class="n">_attenuation_radial</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">list_</span><span class="p">([],</span> <span class="n">six</span><span class="o">.</span><span class="n">text_type</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bg_ch_end_nodes</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">list_</span><span class="p">([],</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Node</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="n">DefaultHandler</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="mi">20</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">on_started</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">iteritems</span><span class="p">(</span><span class="n">CONFIG</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">CONFIG</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">fps</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># type: () -&gt; int</span>
+        <span class="sd">&quot;&quot;&quot;Frame per secondes.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">CONFIG</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fps&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">nuke</span><span class="o">.</span><span class="n">numvalue</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;root.fps&quot;</span><span class="p">))</span>  <span class="c1"># type: ignore</span>
+
+<div class="viewcode-block" id="Comp.task_step"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.task_step">[文档]</a>    <span class="k">def</span> <span class="nf">task_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># type: (six.text_type) -&gt; None</span>
+        <span class="sd">&quot;&quot;&quot;Push task progress bar forward.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">message</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{:-^30s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>  <span class="c1"># type: ignore</span></div>
+
+<div class="viewcode-block" id="Comp.import_resource"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.import_resource">[文档]</a>    <span class="k">def</span> <span class="nf">import_resource</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dir_path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Import footages from config dictionary.&quot;&quot;&quot;</span>
+
+        <span class="c1"># Get all subdir</span>
+        <span class="n">dirs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">dir_path</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;导入素材&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">dir_</span> <span class="ow">in</span> <span class="n">dirs</span><span class="p">:</span>
+            <span class="c1"># Get footage in subdir</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;文件夹 </span><span class="si">%s</span><span class="s2">:&quot;</span><span class="p">,</span> <span class="n">dir_</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
+                <span class="n">BATCH_CONFIG</span><span class="p">[</span><span class="s2">&quot;dir_pat&quot;</span><span class="p">],</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">dir_</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">/&quot;</span><span class="p">))</span>
+            <span class="p">):</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">不匹配文件夹正则, 跳过&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">getFileNameList</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">dir_</span><span class="p">))]</span>
+            <span class="n">footages</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">files</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">i</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s2">&quot;副本&quot;</span><span class="p">,</span> <span class="s2">&quot;.lock&quot;</span><span class="p">))]</span>
+            <span class="k">if</span> <span class="n">footages</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">footages</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dir_</span><span class="p">,</span> <span class="n">f</span><span class="p">))):</span>
+                        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">文件夹: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+                        <span class="k">continue</span>
+                    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">素材: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;footage_pat&quot;</span><span class="p">],</span> <span class="n">f</span><span class="p">,</span> <span class="n">flags</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">I</span><span class="p">):</span>
+                        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">createNode</span><span class="p">(</span>
+                            <span class="sa">b</span><span class="s2">&quot;Read&quot;</span><span class="p">,</span> <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;file {{</span><span class="si">{}</span><span class="s2">/</span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dir_</span><span class="p">,</span> <span class="n">f</span><span class="p">))</span>
+                        <span class="p">)</span>
+                        <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;on_error&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;nearest frame&quot;</span><span class="p">))</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\t\t</span><span class="s2">不匹配素材正则, 跳过&quot;</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{:-^30s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;结束 导入素材&quot;</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Read&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FootageError</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Comp.setup"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.setup">[文档]</a>    <span class="k">def</span> <span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Add tag knob to read nodes, then set project framerange.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nuke</span><span class="o">.</span><span class="n">value</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;root.project_directory&quot;</span><span class="p">):</span>
+            <span class="n">nuke</span><span class="o">.</span><span class="n">knob</span><span class="p">(</span>
+                <span class="sa">b</span><span class="s2">&quot;root.project_directory&quot;</span><span class="p">,</span>
+                <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span>
+                    <span class="sa">r</span><span class="s2">&quot;[python {os.path.join(&quot;</span>
+                    <span class="sa">r</span><span class="s2">&quot;nuke.value(b&#39;root.name&#39;, &#39;&#39;), &#39;../&#39;&quot;</span>
+                    <span class="sa">r</span><span class="s2">&quot;).replace(&#39;</span><span class="se">\\</span><span class="s2">&#39;, &#39;/&#39;)}]&quot;</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="n">nodes</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Read&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FootageError</span><span class="p">(</span><span class="s2">&quot;没有读取节点&quot;</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">formats</span> <span class="o">=</span> <span class="p">[(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">()]</span>
+
+        <span class="n">frame_ranges</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">FrameRanges</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">ReadNode</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+            <span class="n">format_</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">format</span><span class="p">()</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">format_</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Format</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">hasError</span><span class="p">():</span>
+                <span class="n">formats</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">format_</span><span class="o">.</span><span class="n">width</span><span class="p">(),</span> <span class="n">format_</span><span class="o">.</span><span class="n">height</span><span class="p">()))</span>
+            <span class="n">frame_range</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">frameRange</span><span class="p">()</span>
+            <span class="c1"># Ignore single frame.</span>
+            <span class="k">if</span> <span class="n">frame_range</span><span class="o">.</span><span class="n">frames</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">frame_ranges</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">frame_range</span><span class="p">)</span>
+
+        <span class="n">root</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">root</span><span class="p">()</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;first_frame&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">frame_ranges</span><span class="o">.</span><span class="n">minFrame</span><span class="p">())</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;last_frame&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">frame_ranges</span><span class="o">.</span><span class="n">maxFrame</span><span class="p">())</span>
+        <span class="n">nuke</span><span class="o">.</span><span class="n">root</span><span class="p">()</span><span class="o">.</span><span class="n">setFrame</span><span class="p">(</span>
+            <span class="nb">int</span><span class="p">((</span><span class="n">frame_ranges</span><span class="o">.</span><span class="n">minFrame</span><span class="p">()</span> <span class="o">+</span> <span class="n">frame_ranges</span><span class="o">.</span><span class="n">maxFrame</span><span class="p">())</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;lock_range&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">format_</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([(</span><span class="n">formats</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">formats</span><span class="p">)])[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;format&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span>
+                <span class="n">nuke</span><span class="o">.</span><span class="n">addFormat</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">format_</span><span class="p">)))</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;format&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;HD_1080&quot;</span><span class="p">)</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;不能获取工程格式, 使用默认值HD_1080&quot;</span><span class="p">)</span>
+
+        <span class="n">_</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;fps&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fps</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_attenuation_adjust</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">instance</span><span class="p">(</span><span class="n">input_node</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Node</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attenuation_radial</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">radial_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Radial</span><span class="p">(</span>
+                <span class="n">area</span><span class="o">=</span><span class="s2">&quot;0 0 </span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">width</span><span class="p">(),</span> <span class="n">n</span><span class="o">.</span><span class="n">height</span><span class="p">())</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_attenuation_radial</span> <span class="o">=</span> <span class="n">radial_node</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">radial_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Dot</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_attenuation_radial</span><span class="p">],</span> <span class="n">hide_input</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">radial_node</span><span class="p">],</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;soft-light&quot;</span><span class="p">,</span>
+            <span class="n">output</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+            <span class="n">mix</span><span class="o">=</span><span class="s2">&quot;0.6&quot;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;衰减调整&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
+            <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">n</span>
+
+<div class="viewcode-block" id="Comp.create_nodes"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.create_nodes">[文档]</a>    <span class="nd">@undoable_func</span><span class="p">(</span><span class="s2">&quot;自动合成&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">create_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Create nodes that a comp need.&quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;分析读取节点&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;创建节点树&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;合并BG CH&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bg_ch_nodes</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;other&quot;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;合并其他层&quot;</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_other</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bg_ch_end_nodes</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;depth&quot;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;创建整体深度&quot;</span><span class="p">)</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;DepthFix&quot;</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_depth</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">nodes</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;zdefocus&quot;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;添加虚焦控制&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_zdefocus_control</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Unpremult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;整体调色开始&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Premult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;整体调色结束&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;整体滤镜开始&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">SoftClip</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">conversion</span><span class="o">=</span><span class="s2">&quot;logarithmic compress&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;filters&quot;</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Glow2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+                <span class="n">saturation</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                <span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">mix</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+                <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;motion&quot;</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">VectorBlur2</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">uv</span><span class="o">=</span><span class="s2">&quot;motion&quot;</span><span class="p">,</span>
+                    <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">soft_lines</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Aberration</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">distortion1</span><span class="o">=</span><span class="s2">&quot;0 0 0.003&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;溢色&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;整体滤镜结束&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">wlf_Write</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+        <span class="n">n</span><span class="o">.</span><span class="n">setName</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;_Write&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;输出节点创建&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;设置查看器&quot;</span><span class="p">)</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">delete</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Viewer&quot;</span><span class="p">))</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Viewer</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="o">.</span><span class="n">input</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">])</span>
+
+        <span class="n">_</span> <span class="o">=</span> <span class="n">autoplace</span><span class="p">(</span><span class="n">undoable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_mp</span><span class="p">(</span><span class="n">input_node</span><span class="p">,</span> <span class="n">mp_file</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">lut</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node, six.text_type, six.text_type) -&gt; nuke.Node</span>
+        <span class="k">def</span> <span class="nf">_add_lut</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">lut</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">input_node</span>
+
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Vectorfield</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">],</span>
+                <span class="n">file_type</span><span class="o">=</span><span class="s2">&quot;vf&quot;</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;[basename [value this.knob.vfield_file]]&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">cast</span><span class="o">.</span><span class="n">instance</span><span class="p">(</span><span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;vfield_file&quot;</span><span class="p">],</span> <span class="n">nuke</span><span class="o">.</span><span class="n">File_Knob</span><span class="p">)</span><span class="o">.</span><span class="n">fromUserText</span><span class="p">(</span>
+                <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">lut</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">n</span>
+
+        <span class="n">mp_file</span> <span class="o">=</span> <span class="n">mp_file</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">mp_file</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.nk&quot;</span><span class="p">):</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Precomp</span><span class="p">(</span><span class="n">file</span><span class="o">=</span><span class="n">mp_file</span><span class="p">,</span> <span class="n">postage_stamp</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">file</span><span class="o">=</span><span class="n">mp_file</span><span class="p">)</span>
+            <span class="n">cast</span><span class="o">.</span><span class="n">instance</span><span class="p">(</span><span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;file&quot;</span><span class="p">],</span> <span class="n">nuke</span><span class="o">.</span><span class="n">File_Knob</span><span class="p">)</span><span class="o">.</span><span class="n">fromUserText</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">mp_file</span><span class="p">))</span>
+        <span class="n">n</span><span class="o">.</span><span class="n">setName</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;MP&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ModifyMetaData</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+            <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;元数据标签&quot;</span><span class="p">),</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="s2">&quot;{{set comp/tag </span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;MP&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fill&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Transform</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Unpremult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;调色开始&quot;</span><span class="p">))</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">_add_lut</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;colorcorrect&quot;</span><span class="p">]:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Grade</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Grade</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Ramp</span><span class="p">(</span><span class="n">p0</span><span class="o">=</span><span class="s2">&quot;1700 1000&quot;</span><span class="p">,</span> <span class="n">p1</span><span class="o">=</span><span class="s2">&quot;1700 500&quot;</span><span class="p">)],</span> <span class="n">disable</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Premult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;调色结束&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ProjectionMP</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">SoftClip</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">conversion</span><span class="o">=</span><span class="s2">&quot;logarithmic compress&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">DiskCache</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+        <span class="n">input_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">wlf_Lightwrap</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;MP灯光包裹&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span> <span class="n">operation</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;under&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;MP&quot;</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_nodes_order</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; six.text_type</span>
+        <span class="n">tag</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+            <span class="n">n</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">))</span>
+            <span class="ow">or</span> <span class="n">n</span><span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">ReadNode</span><span class="o">.</span><span class="n">tag_knob_name</span><span class="p">)]</span><span class="o">.</span><span class="n">value</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="n">tag</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_BG&quot;</span><span class="p">,</span> <span class="s2">&quot;1_&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_CH&quot;</span><span class="p">,</span> <span class="s2">&quot;0_&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Comp.get_nodes_by_tags"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.get_nodes_by_tags">[文档]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">get_nodes_by_tags</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">tags</span><span class="p">):</span>
+        <span class="c1"># type: (typing.Union[typing.Tuple[six.text_type, ...], six.text_type]) -&gt; typing.List[nuke.Node]</span>
+        <span class="sd">&quot;&quot;&quot;Return nodes that match given tags.&quot;&quot;&quot;</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: typing.List[nuke.Node]</span>
+        <span class="n">tags</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">cast</span><span class="o">.</span><span class="n">list_</span><span class="p">(</span><span class="n">tags</span><span class="p">,</span> <span class="p">(</span><span class="n">six</span><span class="o">.</span><span class="n">text_type</span><span class="p">,</span> <span class="n">six</span><span class="o">.</span><span class="n">binary_type</span><span class="p">))</span>
+        <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Read&quot;</span><span class="p">):</span>
+            <span class="n">knob_name</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">(),</span> <span class="n">ReadNode</span><span class="o">.</span><span class="n">tag_knob_name</span><span class="p">)</span>
+            <span class="n">tag</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">value</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">knob_name</span><span class="p">),</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">tag</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">tags</span><span class="p">:</span>
+                <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+        <span class="n">ret</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_nodes_order</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ret</span></div>
+
+<div class="viewcode-block" id="Comp.output"><a class="viewcode-back" href="../../references/comp.html#comp.Comp.output">[文档]</a>    <span class="k">def</span> <span class="nf">output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+        <span class="c1"># type: (six.text_type) -&gt; None</span>
+        <span class="sd">&quot;&quot;&quot;Save .nk file and render .jpg file.&quot;&quot;&quot;</span>
+
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{:-^30s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;开始 输出&quot;</span><span class="p">))</span>
+        <span class="n">_path</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="n">_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">_dir</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">_dir</span><span class="p">)</span>
+
+        <span class="c1"># Save nk</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;保存为:</span><span class="se">\t</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">_path</span><span class="p">)</span>
+        <span class="n">nuke</span><span class="o">.</span><span class="n">Root</span><span class="p">()[</span><span class="sa">b</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">_path</span><span class="p">)</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">scriptSave</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">_path</span><span class="p">))</span>
+
+        <span class="c1"># Render png</span>
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;RENDER_JPG&quot;</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
+            <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">allNodes</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Read&quot;</span><span class="p">):</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;MP&quot;</span><span class="p">,</span> <span class="s2">&quot;Read_Write_JPG&quot;</span><span class="p">):</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="p">(</span>
+                    <span class="n">n</span><span class="o">.</span><span class="n">firstFrame</span><span class="p">(),</span>
+                    <span class="n">n</span><span class="o">.</span><span class="n">lastFrame</span><span class="p">(),</span>
+                    <span class="nb">int</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">numvalue</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;_Write.knob.frame&quot;</span><span class="p">)),</span>
+                <span class="p">):</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">render_png</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+                        <span class="k">break</span>
+                    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                        <span class="k">continue</span>
+
+        <span class="c1"># Render Single Frame</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">toNode</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;_Write&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Group</span><span class="p">):</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">not_none</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">node</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;Write_JPG_1&quot;</span><span class="p">))</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;disable&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">numvalue</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;_Write.knob.frame&quot;</span><span class="p">)),</span>
+                <span class="n">n</span><span class="o">.</span><span class="n">firstFrame</span><span class="p">(),</span>
+                <span class="n">n</span><span class="o">.</span><span class="n">lastFrame</span><span class="p">(),</span>
+            <span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">nuke</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+                    <span class="k">break</span>
+                <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                    <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">:</span><span class="se">\t</span><span class="s2">渲染出错&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">_path</span><span class="p">)))</span>
+                <span class="k">raise</span> <span class="n">RenderError</span><span class="p">(</span><span class="s2">&quot;Write_JPG_1&quot;</span><span class="p">)</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{:-^30s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;结束 输出&quot;</span><span class="p">))</span></div>
+
+    <span class="k">def</span> <span class="nf">_bg_ch_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># type: () -&gt; nuke.Node</span>
+        <span class="n">nodes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_precomp</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FootageError</span><span class="p">(</span><span class="s2">&quot;BG&quot;</span><span class="p">,</span> <span class="s2">&quot;CH&quot;</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">nodes</span><span class="p">):</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">instance</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Node</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span>
+                <span class="s2">&quot;创建</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">n</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">))</span> <span class="ow">or</span> <span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">()</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_channels</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_colorcorrect_nodes</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">task_step</span><span class="p">(</span><span class="s2">&quot;创建MP&quot;</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_mp</span><span class="p">(</span>
+                    <span class="n">n</span><span class="p">,</span>
+                    <span class="n">mp_file</span><span class="o">=</span><span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;mp&quot;</span><span class="p">],</span>
+                    <span class="n">lut</span><span class="o">=</span><span class="n">CONFIG</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mp_lut&quot;</span><span class="p">),</span>  <span class="c1"># type: ignore</span>
+                <span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_occ</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_shadow</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_merge_screen</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_filter_nodes</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ModifyMetaData</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="s2">&quot;{{set </span><span class="si">{}</span><span class="s2"> main}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">),</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;主干开始&quot;</span><span class="p">),</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">nodes</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">n</span><span class="p">],</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span>
+                        <span class="n">n</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">))</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+
+            <span class="n">nodes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="o">.</span><span class="n">not_none</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_precomp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">tag_nodes_dict</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># type: typing.Dict[six.text_type, typing.List[nuke.Node]]</span>
+
+        <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: typing.List[nuke.Node]</span>
+
+        <span class="k">def</span> <span class="nf">_tag_order</span><span class="p">(</span><span class="n">tag</span><span class="p">):</span>
+            <span class="c1"># type: (six.text_type) -&gt; six.text_type</span>
+            <span class="k">return</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="n">tag</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_BG&quot;</span><span class="p">,</span> <span class="s2">&quot;1_&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_CH&quot;</span><span class="p">,</span> <span class="s2">&quot;0_&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_nodes_by_tags</span><span class="p">((</span><span class="s2">&quot;BG&quot;</span><span class="p">,</span> <span class="s2">&quot;CH&quot;</span><span class="p">)):</span>
+            <span class="n">tag</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">ReadNode</span><span class="o">.</span><span class="n">tag_knob_name</span><span class="p">)]</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">tag_nodes_dict</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="n">tag_nodes_dict</span><span class="p">[</span><span class="n">tag</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+        <span class="n">tags</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">tag_nodes_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">_tag_order</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">tag</span> <span class="ow">in</span> <span class="n">tags</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="n">tag_nodes_dict</span><span class="p">[</span><span class="n">tag</span><span class="p">]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Precomp: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">tag</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">CONFIG</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;precomp&quot;</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
+                    <span class="n">n</span> <span class="o">=</span> <span class="n">nodes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">n</span> <span class="o">=</span> <span class="n">Precomp</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">async_</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">last_node</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ModifyMetaData</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="s2">&quot;{{set </span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">,</span> <span class="n">tag</span><span class="p">),</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;元数据标签&quot;</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">AssertionError</span><span class="p">:</span>
+                <span class="n">ret</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ret</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_prepare_channels</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;masks&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="s2">&quot;SSS.alpha&quot;</span> <span class="ow">in</span> <span class="n">input_node</span><span class="o">.</span><span class="n">channels</span><span class="p">():</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Keyer</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="nb">input</span><span class="o">=</span><span class="s2">&quot;SSS&quot;</span><span class="p">,</span>
+                    <span class="n">output</span><span class="o">=</span><span class="s2">&quot;SSS.alpha&quot;</span><span class="p">,</span>
+                    <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;luminance key&quot;</span><span class="p">,</span>
+                    <span class="nb">range</span><span class="o">=</span><span class="s2">&quot;0 0.01 1 1&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;Emission.alpha&quot;</span> <span class="ow">in</span> <span class="n">input_node</span><span class="o">.</span><span class="n">channels</span><span class="p">():</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Keyer</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="nb">input</span><span class="o">=</span><span class="s2">&quot;Emission&quot;</span><span class="p">,</span>
+                    <span class="n">output</span><span class="o">=</span><span class="s2">&quot;Emission.alpha&quot;</span><span class="p">,</span>
+                    <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;luminance key&quot;</span><span class="p">,</span>
+                    <span class="nb">range</span><span class="o">=</span><span class="s2">&quot;0 0.2 1 1&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;MotionVectors&quot;</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">MotionFix</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">channel</span><span class="o">=</span><span class="s2">&quot;MotionVectors&quot;</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="s2">&quot;motion&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;depth.Z&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">input_node</span><span class="o">.</span><span class="n">channels</span><span class="p">():</span>
+            <span class="n">_constant</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Constant</span><span class="p">(</span>
+                <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;**用渲染出的depth层替换这个**</span><span class="se">\n</span><span class="s2">或者手动指定数值&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">_constant</span><span class="p">],</span> <span class="n">also_merge</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;add_depth&quot;</span>
+            <span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">DepthFix</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="k">def</span> <span class="nf">_add_colorcorrect_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">tag</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">input_node</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">)))</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+
+        <span class="c1"># if CONFIG[&#39;autograde&#39;]:</span>
+        <span class="c1">#     if get_max(input_node, &#39;depth.Z&#39;) &gt; 1.1:</span>
+        <span class="c1">#         n[&#39;farpoint&#39;].setValue(10000)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Unpremult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;调色开始&quot;</span><span class="p">))</span>
+
+        <span class="c1"># if CONFIG[&#39;autograde&#39;]:</span>
+        <span class="c1">#     LOGGER.info(&#39;{:-^30s}&#39;.format(&#39;开始 自动亮度&#39;))</span>
+        <span class="c1">#     n = nuke.nodes.Grade(</span>
+        <span class="c1">#         inputs=[n],</span>
+        <span class="c1">#         unpremult=&#39;rgba.alpha&#39;,</span>
+        <span class="c1">#         label=&#39;白点: [value this.whitepoint]\n混合:[value this.mix]\n使亮度范围靠近0-1&#39;</span>
+        <span class="c1">#     )</span>
+        <span class="c1">#     _max = self._autograde_get_max(input_node)</span>
+        <span class="c1">#     n[&#39;whitepoint&#39;].setValue(_max)</span>
+        <span class="c1">#     n[&#39;mix&#39;].setValue(0.3 if _max &lt; 0.5 else 0.6)</span>
+        <span class="c1">#     LOGGER.info(&#39;{:-^30s}&#39;.format(&#39;结束 自动亮度&#39;))</span>
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;colorcorrect&quot;</span><span class="p">]:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ColorCorrect</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">RolloffContrast</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+                <span class="n">contrast</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="n">center</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+                <span class="n">soft_clip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">tag</span> <span class="ow">and</span> <span class="n">tag</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;BG&quot;</span><span class="p">):</span>
+                <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;in&quot;</span><span class="p">:</span> <span class="sa">b</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;远处&quot;</span><span class="p">)}</span>
+                <span class="n">input_mask</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">PositionKeyer</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ColorCorrect</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input_mask</span><span class="p">],</span> <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Grade</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input_mask</span><span class="p">],</span>
+                    <span class="n">black</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+                    <span class="n">black_panelDropped</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;深度雾&quot;</span><span class="p">),</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;in&quot;</span><span class="p">:</span> <span class="sa">b</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;近处&quot;</span><span class="p">)}</span>
+                <span class="n">input_mask</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">PositionKeyer</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ColorCorrect</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input_mask</span><span class="p">],</span> <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">RolloffContrast</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input_mask</span><span class="p">],</span>
+                    <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+                    <span class="n">contrast</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="n">center</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+                    <span class="n">soft_clip</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attenuation_adjust</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Premult</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;调色结束&quot;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="k">def</span> <span class="nf">_add_filter_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;滤镜开始&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">SoftClip</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">conversion</span><span class="o">=</span><span class="s2">&quot;logarithmic compress&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;zdefocus&quot;</span><span class="p">]:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ZDefocus2</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">math</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+                    <span class="n">center</span><span class="o">=</span><span class="s2">&quot;{{[value _ZDefocus.center curve]}}&quot;</span><span class="p">,</span>
+                    <span class="n">focal_point</span><span class="o">=</span><span class="s2">&quot;1.#INF 1.#INF&quot;</span><span class="p">,</span>
+                    <span class="n">dof</span><span class="o">=</span><span class="s2">&quot;{{[value _ZDefocus.dof curve]}}&quot;</span><span class="p">,</span>
+                    <span class="n">blur_dof</span><span class="o">=</span><span class="s2">&quot;{{[value _ZDefocus.blur_dof curve]}}&quot;</span><span class="p">,</span>
+                    <span class="n">size</span><span class="o">=</span><span class="s2">&quot;{{[value _ZDefocus.size curve]}}&quot;</span><span class="p">,</span>
+                    <span class="n">max_size</span><span class="o">=</span><span class="s2">&quot;{{[value _ZDefocus.max_size curve]}}&quot;</span><span class="p">,</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span>
+                        <span class="s2">&quot;[</span><span class="se">\n</span><span class="s2">set trg parent._ZDefocus</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;knob this.math [value $trg.math depth]</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;knob this.z_channel [value $trg.z_channel depth.Z]</span><span class="se">\n</span><span class="s2">&quot;</span>
+                        <span class="s2">&quot;if {[exists _ZDefocus]} &quot;</span>
+                        <span class="s1">&#39;{return &quot;由_ZDefocus控制&quot;} &#39;</span>
+                        <span class="s2">&quot;else &quot;</span>
+                        <span class="s1">&#39;{return &quot;需要_ZDefocus节点&quot;}</span><span class="se">\n</span><span class="s1">]&#39;</span><span class="p">,</span>
+                    <span class="p">),</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="s2">&quot;{{![exists _ZDefocus] &quot;</span>
+                    <span class="s1">&#39;|| [if {[value _ZDefocus.focal_point &quot;200 200&quot;] == &quot;200 200&quot; &#39;</span>
+                    <span class="s2">&quot;|| [value _ZDefocus.disable]} {return True} else {return False}]}}&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                    <span class="n">n</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">))</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;BG&quot;</span><span class="p">):</span>
+                    <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;autoLayerSpacing&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;layers&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;create ZDefocus failed&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">CONFIG</span><span class="p">[</span><span class="s2">&quot;filters&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="s2">&quot;motion&quot;</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">VectorBlur2</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">uv</span><span class="o">=</span><span class="s2">&quot;motion&quot;</span><span class="p">,</span>
+                    <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                    <span class="n">soft_lines</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="p">)</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">RSMB</span><span class="p">(</span>
+                    <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                    <span class="n">disable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;运动模糊&quot;</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;RSMB插件未安装&quot;</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="s2">&quot;Emission&quot;</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;W&quot;</span><span class="p">:</span> <span class="s2">&quot;Emission.alpha&quot;</span><span class="p">}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;disable&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Glow2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">size</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;自发光辉光&quot;</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;滤镜结束&quot;</span><span class="p">))</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">DiskCache</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bg_ch_end_nodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="c1"># @staticmethod</span>
+    <span class="c1"># def _autograde_get_max(n):</span>
+    <span class="c1">#     # Exclude small highlight</span>
+    <span class="c1">#     ret = 100</span>
+    <span class="c1">#     erode = 0</span>
+    <span class="c1">#     n = nuke.nodes.Dilate(inputs=[n])</span>
+    <span class="c1">#     while ret &gt; 1 and erode &gt; n.height() / -100.0:</span>
+    <span class="c1">#         n[&#39;size&#39;].setValue(erode)</span>
+    <span class="c1">#         LOGGER.info(&#39;收边 %s&#39;, erode)</span>
+    <span class="c1">#         ret = get_max(n, &#39;rgb&#39;)</span>
+    <span class="c1">#         erode -= 1</span>
+    <span class="c1">#     nuke.delete(n)</span>
+
+    <span class="c1">#     return ret</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_depth</span><span class="p">(</span><span class="n">input_node</span><span class="p">,</span> <span class="n">nodes</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node, typing.List[nuke.Node]) -&gt; nuke.Node</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">input_node</span>
+
+        <span class="n">merge_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">nodes</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">nodes</span><span class="p">[</span><span class="mi">2</span><span class="p">:]),</span>
+            <span class="n">tile_color</span><span class="o">=</span><span class="mi">2184871423</span><span class="p">,</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;min&quot;</span><span class="p">,</span>
+            <span class="n">Achannels</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+            <span class="n">Bchannels</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+            <span class="n">output</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;整体深度&quot;</span><span class="p">),</span>
+            <span class="n">hide_input</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">copy_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Copy</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">,</span> <span class="n">merge_node</span><span class="p">],</span> <span class="n">from0</span><span class="o">=</span><span class="s2">&quot;depth.Z&quot;</span><span class="p">,</span> <span class="n">to0</span><span class="o">=</span><span class="s2">&quot;depth.Z&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">copy_node</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_other</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">input_node</span><span class="p">,</span> <span class="n">nodes</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node, typing.List[nuke.Node]) -&gt; nuke.Node</span>
+        <span class="n">nodes</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_nodes_order</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">input_node</span>
+        <span class="n">input0</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Dot</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">hide_input</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Grade</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span>
+                <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;alpha&quot;</span><span class="p">,</span>
+                <span class="n">blackpoint</span><span class="o">=</span><span class="s2">&quot;0.99&quot;</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;去除抗锯齿部分的内容&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span>
+                <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;copy&quot;</span><span class="p">,</span>
+                <span class="n">also_merge</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">metadata</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">tag_metadata_key</span><span class="p">))</span> <span class="ow">or</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">input0</span> <span class="o">=</span> <span class="n">n</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Remove</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;rgba&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">,</span> <span class="n">n</span><span class="p">],</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;copy&quot;</span><span class="p">,</span>
+            <span class="n">Achannels</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+            <span class="n">Bchannels</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+            <span class="n">output</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+            <span class="n">also_merge</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;合并rgba以外的层&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_occ</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">_nodes</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">get_nodes_by_tags</span><span class="p">((</span><span class="s2">&quot;OC&quot;</span><span class="p">,</span> <span class="s2">&quot;OCC&quot;</span><span class="p">,</span> <span class="s2">&quot;AO&quot;</span><span class="p">))</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="k">for</span> <span class="n">_read_node</span> <span class="ow">in</span> <span class="n">_nodes</span><span class="p">:</span>
+            <span class="n">_reformat_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">_read_node</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">_reformat_node</span><span class="p">],</span>
+                <span class="n">output</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+                <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;multiply&quot;</span><span class="p">,</span>
+                <span class="n">screen_alpha</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;OCC&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_shadow</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">_nodes</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">get_nodes_by_tags</span><span class="p">((</span><span class="s2">&quot;SH&quot;</span><span class="p">,</span> <span class="s2">&quot;SD&quot;</span><span class="p">))</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="k">for</span> <span class="n">_read_node</span> <span class="ow">in</span> <span class="n">_nodes</span><span class="p">:</span>
+            <span class="n">_reformat_node</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">_read_node</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">_grade_shadow</span><span class="p">([</span><span class="n">n</span><span class="p">,</span> <span class="n">_reformat_node</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_grade_shadow</span><span class="p">(</span><span class="n">inputs</span><span class="p">):</span>
+        <span class="c1"># type: (typing.List[nuke.Node]) -&gt; nuke.Node</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Grade</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span>
+            <span class="n">white</span><span class="o">=</span><span class="s2">&quot;0.08420000225 0.1441999972 0.2041999996 0.0700000003&quot;</span><span class="p">,</span>
+            <span class="n">white_panelDropped</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;Shadow&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_occsh</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+        <span class="n">nodes</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">get_nodes_by_tags</span><span class="p">((</span><span class="s2">&quot;OCCSH&quot;</span><span class="p">,))</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="k">for</span> <span class="n">read_node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+            <span class="n">input1</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">read_node</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">)</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">_grade_shadow</span><span class="p">([</span><span class="n">n</span><span class="p">,</span> <span class="n">input1</span><span class="p">])</span>
+            <span class="n">input1</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Invert</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input1</span><span class="p">])</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input1</span><span class="p">],</span>
+                <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+                <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;multiply&quot;</span><span class="p">,</span>
+                <span class="n">screen_alpha</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">b</span><span class="s2">&quot;OCC&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_merge_screen</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="n">_nodes</span> <span class="o">=</span> <span class="n">Comp</span><span class="o">.</span><span class="n">get_nodes_by_tags</span><span class="p">(</span><span class="s2">&quot;FOG&quot;</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">input_node</span>
+        <span class="k">for</span> <span class="n">_read_node</span> <span class="ow">in</span> <span class="n">_nodes</span><span class="p">:</span>
+            <span class="n">input1</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Reformat</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">_read_node</span><span class="p">],</span> <span class="n">resize</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;VolumeLighting&quot;</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">input1</span><span class="p">):</span>
+                <span class="n">input1</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Shuffle</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input1</span><span class="p">],</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;in&quot;</span><span class="p">:</span> <span class="s2">&quot;VolumeLighting&quot;</span><span class="p">})</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">input1</span><span class="p">],</span>
+                <span class="n">output</span><span class="o">=</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+                <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;screen&quot;</span><span class="p">,</span>
+                <span class="n">maskChannelInput</span><span class="o">=</span><span class="s2">&quot;rgba.alpha&quot;</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">_read_node</span><span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">ReadNode</span><span class="o">.</span><span class="n">tag_knob_name</span><span class="p">)]</span><span class="o">.</span><span class="n">value</span><span class="p">(),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_add_zdefocus_control</span><span class="p">(</span><span class="n">input_node</span><span class="p">):</span>
+        <span class="c1"># type: (nuke.Node) -&gt; nuke.Node</span>
+        <span class="c1"># Use for one-node zdefocus control</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">ZDefocus2</span><span class="p">(</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input_node</span><span class="p">],</span>
+            <span class="n">math</span><span class="o">=</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span>
+            <span class="n">output</span><span class="o">=</span><span class="s2">&quot;focal plane setup&quot;</span><span class="p">,</span>
+            <span class="n">center</span><span class="o">=</span><span class="mf">0.00234567</span><span class="p">,</span>
+            <span class="n">blur_dof</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;** 虚焦总控制 **</span><span class="se">\n</span><span class="s2">在此拖点定虚焦及设置&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">n</span><span class="o">.</span><span class="n">setName</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;_ZDefocus&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">n</span></div>
+
+
+<div class="viewcode-block" id="render_png"><a class="viewcode-back" href="../../references/comp.html#comp.render_png">[文档]</a><span class="k">def</span> <span class="nf">render_png</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">show</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="c1"># type: (typing.Union[typing.Iterable[nuke.Node], nuke.Node], int, bool) -&gt; None</span>
+    <span class="sd">&quot;&quot;&quot;create png for given @nodes.&quot;&quot;&quot;</span>
+
+    <span class="n">nodes</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">list_</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Node</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">nuke</span><span class="o">.</span><span class="n">value</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;root.project_directory&quot;</span><span class="p">),</span> <span class="s2">&quot;未设置工程目录&quot;</span>
+    <span class="n">script_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">value</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;root.name&quot;</span><span class="p">)))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">frame</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">frame</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">read_node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">read_node</span><span class="o">.</span><span class="n">hasError</span><span class="p">()</span> <span class="ow">or</span> <span class="n">read_node</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;disable&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">read_node</span><span class="o">.</span><span class="n">name</span><span class="p">()</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;渲染: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">read_node</span><span class="p">],</span> <span class="n">channels</span><span class="o">=</span><span class="s2">&quot;rgba&quot;</span><span class="p">)</span>
+        <span class="n">cast</span><span class="o">.</span><span class="n">instance</span><span class="p">(</span><span class="n">n</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;file&quot;</span><span class="p">],</span> <span class="n">nuke</span><span class="o">.</span><span class="n">File_Knob</span><span class="p">)</span><span class="o">.</span><span class="n">fromUserText</span><span class="p">(</span>
+            <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">script_name</span><span class="p">),</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.</span><span class="si">{}</span><span class="s2">.png&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">frame</span><span class="p">))</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">nuke</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+
+        <span class="n">nuke</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">show</span><span class="p">:</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">nuke</span><span class="o">.</span><span class="n">value</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;root.project_directory&quot;</span><span class="p">)),</span>
+                <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">script_name</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FootageError"><a class="viewcode-back" href="../../references/comp.html#comp.FootageError">[文档]</a><span class="k">class</span> <span class="nc">FootageError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Indicate not found needed footage.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">FootageError</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="n">args</span>  <span class="c1"># type: typing.Tuple[typing.Any, ...]</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot; # &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RenderError"><a class="viewcode-back" href="../../references/comp.html#comp.RenderError">[文档]</a><span class="k">class</span> <span class="nc">RenderError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Indicate some problem caused when rendering.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RenderError</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="n">args</span>  <span class="c1"># type: typing.Tuple[typing.Any, ...]</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot; # &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../../index.html">
+    <img class="logo" src="../../_static/logo.png" alt="Logo"/>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+<h3>导航</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../plug-ins.html">插件节点</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../features.html">功能</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../menu.html">菜单</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pref.html">首选项设置</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pyblish.html">发布</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guide.html">指南</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../spec.html">规范</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../env-vars.html">环境变量</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../development.html">开发</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../re.html">正则表达式</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reference.html">编程参考</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">更新日志</a></li>
+</ul>
+
+
+<div id="searchbox" style="display: none" role="search">
+  <h3>快速搜索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="转向" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017-2020, WuLiFang Studio.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.8.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

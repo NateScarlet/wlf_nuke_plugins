@@ -1,0 +1,334 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh_cn">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>edit.channel &#8212; 吾立方插件 0.20.10 文档</title>
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="../../_static/language_data.js"></script>
+    <link rel="index" title="索引" href="../../genindex.html" />
+    <link rel="search" title="搜索" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>edit.channel 源代码</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding=UTF-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;Handle image channels.  &quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span><span class="p">,</span> <span class="n">unicode_literals</span>
+
+<span class="kn">import</span> <span class="nn">nuke</span>
+
+<span class="kn">import</span> <span class="nn">cast_unknown</span> <span class="k">as</span> <span class="nn">cast</span>
+
+<span class="kn">import</span> <span class="nn">six</span>
+
+<span class="n">TYPE_CHECKING</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Text</span><span class="p">,</span> <span class="n">List</span>
+
+
+<div class="viewcode-block" id="add_channel"><a class="viewcode-back" href="../../references/edit.html#edit.add_channel">[文档]</a><span class="k">def</span> <span class="nf">add_channel</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">,</span>  <span class="c1"># type: six.text_type</span>
+<span class="p">):</span>  <span class="c1"># type: (...) -&gt; None</span>
+    <span class="sd">&quot;&quot;&quot;Add a channel from `{layer}.{channel}` format string.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name (str): Channel name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">six</span><span class="o">.</span><span class="n">text_type</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">UnicodeDecodeError</span><span class="p">,</span> <span class="ne">UnicodeEncodeError</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Non-ascii character not acceptable.&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">layer</span><span class="p">,</span> <span class="n">channel</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">layer</span><span class="p">,</span> <span class="n">channel</span> <span class="o">=</span> <span class="s2">&quot;other&quot;</span><span class="p">,</span> <span class="n">name</span>
+    <span class="k">if</span> <span class="s2">&quot;.&quot;</span> <span class="ow">in</span> <span class="n">channel</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Wrong channel format.&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="n">_</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Layer</span><span class="p">(</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">layer</span><span class="p">),</span> <span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="n">name</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="add_layer"><a class="viewcode-back" href="../../references/edit.html#edit.add_layer">[文档]</a><span class="k">def</span> <span class="nf">add_layer</span><span class="p">(</span><span class="n">layername</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Add layer to nuke from @layername.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        nuke.Layer or None: Added layer.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">layername</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">():</span>
+        <span class="k">return</span>
+
+    <span class="n">channels</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">layername</span><span class="p">,</span> <span class="n">channel</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="s2">&quot;blue&quot;</span><span class="p">,</span> <span class="s2">&quot;alpha&quot;</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">return</span> <span class="n">nuke</span><span class="o">.</span><span class="n">Layer</span><span class="p">(</span><span class="n">layername</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="escape_for_channel"><a class="viewcode-back" href="../../references/edit.html#edit.escape_for_channel">[文档]</a><span class="k">def</span> <span class="nf">escape_for_channel</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="c1"># type: (Text) -&gt; Text</span>
+    <span class="sd">&quot;&quot;&quot;Escape text for channel name.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        text (str): Text for escaped</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: Escaped text.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; escape_for_channel(&#39;apple&#39;)</span>
+<span class="sd">        &#39;mask_extra.apple&#39;</span>
+<span class="sd">        &gt;&gt;&gt; escape_for_channel(&#39;tree.apple&#39;)</span>
+<span class="sd">        &#39;tree.apple&#39;</span>
+<span class="sd">        &gt;&gt;&gt; escape_for_channel(&#39;tree.apple.leaf&#39;)</span>
+<span class="sd">        &#39;tree.apple_leaf&#39;</span>
+<span class="sd">        &gt;&gt;&gt; escape_for_channel(&#39;tree.apple.leaf.根&#39;)</span>
+<span class="sd">        &#39;tree.apple_leaf_?&#39;</span>
+<span class="sd">        &gt;&gt;&gt; escape_for_channel(None)</span>
+<span class="sd">        &#39;mask_extra.None&#39;</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">cast</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;.&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ret</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="s2">&quot;mask_extra.</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">ret</span><span class="p">)</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0[0]}{0[1]}{1}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">ret</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span></div>
+
+
+<div class="viewcode-block" id="named_copy"><a class="viewcode-back" href="../../references/edit.html#edit.named_copy">[文档]</a><span class="k">def</span> <span class="nf">named_copy</span><span class="p">(</span>
+    <span class="n">n</span><span class="p">,</span>  <span class="c1"># type: nuke.Node</span>
+    <span class="n">names_dict</span><span class="p">,</span>  <span class="c1"># type: Dict[Text,Text]</span>
+<span class="p">):</span>  <span class="c1"># type: (...) -&gt; nuke.Node</span>
+    <span class="sd">&quot;&quot;&quot;Create multiple Copy node on demand.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        n (nuke.Node): Node as input.</span>
+<span class="sd">        names_dict (dict[str:str]): A dict with source channel name as key,</span>
+<span class="sd">            target channel name as value.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        nuke.Node: Output node.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_rgba_order</span><span class="p">(</span><span class="n">channel</span><span class="p">):</span>
+        <span class="c1"># type: (six.text_type) -&gt; six.text_type</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="n">repl</span> <span class="o">=</span> <span class="p">((</span><span class="s2">&quot;.red&quot;</span><span class="p">,</span> <span class="s2">&quot;.0_&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;.green&quot;</span><span class="p">,</span> <span class="s2">&quot;.1_&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;.blue&quot;</span><span class="p">,</span> <span class="s2">&quot;.2_&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;.alpha&quot;</span><span class="p">,</span> <span class="s2">&quot;3_&quot;</span><span class="p">))</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="k">lambda</span> <span class="n">text</span><span class="p">,</span> <span class="n">repl</span><span class="p">:</span> <span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="o">*</span><span class="n">repl</span><span class="p">),</span> <span class="n">repl</span><span class="p">,</span> <span class="n">ret</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ret</span>
+
+    <span class="c1"># For short version channel name.</span>
+    <span class="n">convert_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;r&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.red&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;g&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.green&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.blue&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.alpha&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;red&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.red&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;green&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.green&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;blue&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.blue&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;alpha&quot;</span><span class="p">:</span> <span class="s2">&quot;rgba.alpha&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Escape input</span>
+    <span class="n">names_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">convert_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span> <span class="n">escape_for_channel</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">names_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">v</span>
+    <span class="p">}</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">names_dict</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">_rgba_order</span><span class="p">)):</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">names_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+
+        <span class="n">index</span> <span class="o">=</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">4</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">index</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Copy</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">])</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;from</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">index</span><span class="p">))]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">add_channel</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">n</span><span class="p">[</span><span class="n">cast</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="s2">&quot;to</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">index</span><span class="p">))]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">n</span></div>
+
+
+<div class="viewcode-block" id="split_layers"><a class="viewcode-back" href="../../references/edit.html#edit.split_layers">[文档]</a><span class="k">def</span> <span class="nf">split_layers</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+    <span class="c1"># type: (nuke.Node) -&gt; List[nuke.Node]</span>
+    <span class="sd">&quot;&quot;&quot;Create Shuffle node for each layers in node @n.&quot;&quot;&quot;</span>
+
+    <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: List[nuke.Node]</span>
+
+    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">layer</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;rgb&quot;</span><span class="p">,</span> <span class="s2">&quot;rgba&quot;</span><span class="p">,</span> <span class="s2">&quot;alpha&quot;</span><span class="p">]:</span>
+            <span class="k">continue</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;in&quot;</span><span class="p">:</span> <span class="n">layer</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">layer</span><span class="p">}</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;postage_stamp&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;postage_stamp&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">NameError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Shuffle</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">node</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span></div>
+
+
+<div class="viewcode-block" id="shuffle_rgba"><a class="viewcode-back" href="../../references/edit.html#edit.shuffle_rgba">[文档]</a><span class="k">def</span> <span class="nf">shuffle_rgba</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+    <span class="c1"># type: (nuke.Node) -&gt; List[nuke.Node]</span>
+    <span class="sd">&quot;&quot;&quot;Create rgba shuffle.&quot;&quot;&quot;</span>
+
+    <span class="n">channels</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="s2">&quot;blue&quot;</span><span class="p">,</span> <span class="s2">&quot;alpha&quot;</span><span class="p">)</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># type: List[nuke.Node]</span>
+
+    <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="n">channels</span><span class="p">:</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">channel</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">channels</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;postage_stamp&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;postage_stamp&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">NameError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Shuffle</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">node</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ret</span></div>
+
+
+<div class="viewcode-block" id="copy_layer"><a class="viewcode-back" href="../../references/edit.html#edit.copy_layer">[文档]</a><span class="k">def</span> <span class="nf">copy_layer</span><span class="p">(</span><span class="n">input0</span><span class="p">,</span> <span class="n">input1</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="s2">&quot;rgba&quot;</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Copy whole layer from a node to another.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        input0 (nuke.Node): Source node</span>
+<span class="sd">        input1 (nuke.Node, optional): Defaults to None.</span>
+<span class="sd">            If given, use source layer from this node.</span>
+<span class="sd">        layer (str, optional): Defaults to &#39;rgba&#39;.</span>
+<span class="sd">            Source layer name.</span>
+<span class="sd">        output (str, optional): Defaults to None.</span>
+<span class="sd">            Output layer name. If not given, use same with source layer.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        nuke.Node: Final output node.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">output</span> <span class="o">=</span> <span class="n">output</span> <span class="ow">or</span> <span class="n">layer</span>
+    <span class="n">input1</span> <span class="o">=</span> <span class="n">input1</span> <span class="ow">or</span> <span class="n">input0</span>
+
+    <span class="c1"># Skip case that has no effect.</span>
+    <span class="k">if</span> <span class="n">input0</span> <span class="ow">is</span> <span class="n">input1</span> <span class="ow">and</span> <span class="n">layer</span> <span class="o">==</span> <span class="n">output</span> <span class="ow">and</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">input0</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">input0</span>
+
+    <span class="c1"># Choice input channel name.</span>
+    <span class="n">input1_layers</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">layers</span><span class="p">(</span><span class="n">input1</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">input_channel</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="s2">&quot;rgba&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">input1_layers</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Can not find avaliable layer in input1&quot;</span><span class="p">,</span> <span class="n">input1_layers</span><span class="p">)</span>
+
+    <span class="n">_</span> <span class="o">=</span> <span class="n">add_layer</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="c1"># Use shuffle if input0 is input1 else use merge.</span>
+    <span class="k">if</span> <span class="n">input0</span> <span class="ow">is</span> <span class="n">input1</span><span class="p">:</span>
+        <span class="n">_d</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;in&quot;</span><span class="p">:</span> <span class="n">input_channel</span><span class="p">}</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Shuffle</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input1</span><span class="p">],</span> <span class="n">out</span><span class="o">=</span><span class="n">output</span><span class="p">,</span> <span class="o">**</span><span class="n">_d</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">nuke</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Merge2</span><span class="p">(</span>
+            <span class="n">tile_color</span><span class="o">=</span><span class="mh">0x9E3C63FF</span><span class="p">,</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">input0</span><span class="p">,</span> <span class="n">input1</span><span class="p">],</span>
+            <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;copy&quot;</span><span class="p">,</span>
+            <span class="n">Achannels</span><span class="o">=</span><span class="n">input_channel</span><span class="p">,</span>
+            <span class="n">Bchannels</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+            <span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="n">layer</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../../index.html">
+    <img class="logo" src="../../_static/logo.png" alt="Logo"/>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+<h3>导航</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../plug-ins.html">插件节点</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../features.html">功能</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../menu.html">菜单</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pref.html">首选项设置</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../pyblish.html">发布</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../guide.html">指南</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../spec.html">规范</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../env-vars.html">环境变量</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../development.html">开发</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../re.html">正则表达式</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reference.html">编程参考</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">更新日志</a></li>
+</ul>
+
+
+<div id="searchbox" style="display: none" role="search">
+  <h3>快速搜索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="转向" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017-2020, WuLiFang Studio.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.8.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

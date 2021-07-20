@@ -1,0 +1,215 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh_cn">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>asset &#8212; 吾立方插件 0.20.10 文档</title>
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="索引" href="../genindex.html" />
+    <link rel="search" title="搜索" href="../search.html" />
+    <link rel="next" title="callback" href="callback.html" />
+    <link rel="prev" title="编程参考" href="../reference.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="asset">
+<h1>asset<a class="headerlink" href="#asset" title="永久链接至标题">¶</a></h1>
+<p>此模块用于 资产的使用和检查</p>
+<div class="section" id="module-asset.autofix">
+<span id="autofix"></span><h2>autofix<a class="headerlink" href="#module-asset.autofix" title="永久链接至标题">¶</a></h2>
+<p>Auto fix wrong nodes.</p>
+<dl class="function">
+<dt id="asset.autofix.fix_read">
+<code class="descclassname">asset.autofix.</code><code class="descname">fix_read</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/autofix.html#fix_read"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.autofix.fix_read" title="永久链接至目标">¶</a></dt>
+<dd><p>Try fix all nodes that has filename error.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-asset.comp">
+<span id="comp"></span><h2>comp<a class="headerlink" href="#module-asset.comp" title="永久链接至标题">¶</a></h2>
+<p>Comp script file.</p>
+<dl class="function">
+<dt id="asset.comp.sent_to_dir">
+<code class="descclassname">asset.comp.</code><code class="descname">sent_to_dir</code><span class="sig-paren">(</span><em>dir_</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/comp.html#sent_to_dir"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.comp.sent_to_dir" title="永久链接至目标">¶</a></dt>
+<dd><p>Send current working file to dir.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-asset.core">
+<span id="core"></span><h2>core<a class="headerlink" href="#module-asset.core" title="永久链接至标题">¶</a></h2>
+<p>Deal with assets and files in nuke.</p>
+</div>
+<div class="section" id="module-asset.missing_frames">
+<span id="missing-frames"></span><h2>missing_frames<a class="headerlink" href="#module-asset.missing_frames" title="永久链接至标题">¶</a></h2>
+<p>Check missing frames for asset.</p>
+</div>
+<div class="section" id="module-asset.localization">
+<span id="localization"></span><h2>localization<a class="headerlink" href="#module-asset.localization" title="永久链接至标题">¶</a></h2>
+<p>Modify nuke localization functionality.</p>
+<dl class="function">
+<dt id="asset.localization.is_support_localization">
+<code class="descclassname">asset.localization.</code><code class="descname">is_support_localization</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/localization.html#is_support_localization"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.localization.is_support_localization" title="永久链接至目标">¶</a></dt>
+<dd><p>Return is nuke supported localization feature.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="asset.localization.need_localization_support">
+<code class="descclassname">asset.localization.</code><code class="descname">need_localization_support</code><span class="sig-paren">(</span><em>func</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/localization.html#need_localization_support"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.localization.need_localization_support" title="永久链接至目标">¶</a></dt>
+<dd><p>Decorator.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="asset.localization.update">
+<code class="descclassname">asset.localization.</code><code class="descname">update</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/localization.html#update"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.localization.update" title="永久链接至目标">¶</a></dt>
+<dd><p>Update localized files</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-asset.notify">
+<span id="notify"></span><h2>notify<a class="headerlink" href="#module-asset.notify" title="永久链接至标题">¶</a></h2>
+<p>Asset notify.</p>
+<dl class="function">
+<dt id="asset.notify.reset_warning_history">
+<code class="descclassname">asset.notify.</code><code class="descname">reset_warning_history</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/notify.html#reset_warning_history"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.notify.reset_warning_history" title="永久链接至目标">¶</a></dt>
+<dd><p>Forget showed warning.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="asset.notify.throtted_warning">
+<code class="descclassname">asset.notify.</code><code class="descname">throtted_warning</code><span class="sig-paren">(</span><em>msg</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/notify.html#throtted_warning"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.notify.throtted_warning" title="永久链接至目标">¶</a></dt>
+<dd><p>Only show each warning message once.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="asset.notify.warn_missing_frames">
+<code class="descclassname">asset.notify.</code><code class="descname">warn_missing_frames</code><span class="sig-paren">(</span><em>nodes=None</em>, <em>show_ok=False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/notify.html#warn_missing_frames"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.notify.warn_missing_frames" title="永久链接至目标">¶</a></dt>
+<dd><p>Show missing frames to user
+:param assets: Defaults to None.
+:type assets: any, optional
+:param object contains assets, None mean all Assets.:
+:param show_ok: Defaults to False.
+:type show_ok: bool, optional
+:param If show message for no missing frames.:</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="asset.notify.warn_mtime">
+<code class="descclassname">asset.notify.</code><code class="descname">warn_mtime</code><span class="sig-paren">(</span><em>show_ok=False</em>, <em>since=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/asset/notify.html#warn_mtime"><span class="viewcode-link">[源代码]</span></a><a class="headerlink" href="#asset.notify.warn_mtime" title="永久链接至目标">¶</a></dt>
+<dd><p>Show footage that mtime newer than script mtime.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-asset.util">
+<span id="util"></span><h2>util<a class="headerlink" href="#module-asset.util" title="永久链接至标题">¶</a></h2>
+<p>Asset utility.</p>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<p class="logo">
+  <a href="../index.html">
+    <img class="logo" src="../_static/logo.png" alt="Logo"/>
+    
+  </a>
+</p>
+
+
+
+
+
+
+
+
+<h3>导航</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../plug-ins.html">插件节点</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">功能</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../menu.html">菜单</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pref.html">首选项设置</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../pyblish.html">发布</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../guide.html">指南</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../spec.html">规范</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../env-vars.html">环境变量</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development.html">开发</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../re.html">正则表达式</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">编程参考</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../reference.html#id2">索引</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">asset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="callback.html">callback</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cgtwn.html">cgtwn</a></li>
+<li class="toctree-l3"><a class="reference internal" href="comp.html">comp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dropdata.html">dropdata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="edit.html">edit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="node.html">node</a></li>
+<li class="toctree-l3"><a class="reference internal" href="organize.html">organize</a></li>
+<li class="toctree-l3"><a class="reference internal" href="panels.html">panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pref.html">pref</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">更新日志</a></li>
+</ul>
+
+
+<div id="searchbox" style="display: none" role="search">
+  <h3>快速搜索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="转向" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017-2020, WuLiFang Studio.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.8.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/references/asset.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
